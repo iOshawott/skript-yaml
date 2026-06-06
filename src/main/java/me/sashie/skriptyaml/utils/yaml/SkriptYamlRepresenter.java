@@ -19,34 +19,16 @@ import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.DumperOptions.FlowStyle;
 import org.yaml.snakeyaml.nodes.Node;
 import org.yaml.snakeyaml.nodes.Tag;
-import org.yaml.snakeyaml.representer.BaseRepresenter;
 import org.yaml.snakeyaml.representer.Represent;
 import org.yaml.snakeyaml.representer.Representer;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.*;
 
 public class SkriptYamlRepresenter extends Representer {
 
-	private static Method representMappingMethod;
-	private static Method representScalarMethod;
+	// Usunięto pola refleksji, które powodowały błędy NullPointerException
 
-	static {		
-		if (SkriptYaml.getInstance().getServerVersion() <= 12) {
-			try {
-				Class<?> baseRepresenterClass = BaseRepresenter.class;
-				representMappingMethod = baseRepresenterClass.getDeclaredMethod("representMapping", Tag.class, Map.class, Boolean.class);
-				representMappingMethod.setAccessible(true);
-				representScalarMethod = baseRepresenterClass.getDeclaredMethod("representScalar", Tag.class, String.class, Character.class);
-				representScalarMethod.setAccessible(true);
-			} catch (SecurityException | NoSuchMethodException e) {
-				e.printStackTrace();
-			}
-		}
-	}
-
-	private static List<String> representedClasses = new ArrayList<>();
+	private static final List<String> representedClasses = new ArrayList<>();
 
 	public SkriptYamlRepresenter() {
 		super(new DumperOptions());
@@ -121,17 +103,7 @@ public class SkriptYamlRepresenter extends Representer {
 
 	private Node representScalar(Object data) {
 		if (data instanceof String && data.toString().contains("&")) {	//fixing a bug with color codes not working sometimes
-			if (SkriptYaml.getInstance().getServerVersion() >= 13) {
-				return representScalar(Tag.STR, data.toString(), DumperOptions.ScalarStyle.DOUBLE_QUOTED);
-			} else {
-				Node node = null;
-				try {
-					node = (Node) representScalarMethod.invoke(this, Tag.STR, data.toString(), '"');
-				} catch (SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-					e.printStackTrace();
-				}
-				return node;
-			}
+			return representScalar(Tag.STR, data.toString(), DumperOptions.ScalarStyle.DOUBLE_QUOTED);
 		} else {
 			return representScalar(Tag.STR, data.toString());
 		}
@@ -212,22 +184,12 @@ public class SkriptYamlRepresenter extends Representer {
 	}
 
 	/*
-	 * To make things backwards compatible and prevent NoSuchMethod exceptions.
-	 * (spigot updated snakeyaml in 1.13.2)
+	 * Usunięto refleksję wstecznej kompatybilności dla 1.12, 
+	 * aby dopasować działanie do nowego SnakeYAML.
 	 */
 	@SuppressWarnings({ "unchecked" })
 	public <T> T representMapping(Tag tag, Map<?, ?> mapping) {
-		if (SkriptYaml.getInstance().getServerVersion() >= 13) {
-			return (T) representMapping(tag, mapping, FlowStyle.BLOCK);
-		} else {
-			T node = null;
-			try {
-				node = (T) representMappingMethod.invoke(this, tag, mapping, null);
-			} catch (SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
-				e.printStackTrace();
-			}
-			return (T) node;
-		}
+		return (T) representMapping(tag, mapping, FlowStyle.BLOCK);
 	}
 	
 	private class RepresentSkriptItemType extends RepresentMap {
@@ -245,19 +207,6 @@ public class SkriptYamlRepresenter extends Representer {
 		}
 	}
 
-	/* TODO eventually add support for different slot types
-	private class RepresentInventorySlot extends RepresentMap {
-		@Override
-		public Node representData(Object data) {
-		Map<String, Object> out = new LinkedHashMap<String, Object>();
-			InventorySlot slot = (InventorySlot) data;
-			out.put("index", slot.getIndex());
-			out.put("item", slot.getItem());
-			return representMapping(new Tag("!skriptclass"), out, null);
-		}
-	}
-	*/
-
 	private class RepresentSkriptDate implements Represent {
 		@Override
 		public Node representData(Object data) {
@@ -273,7 +222,6 @@ public class SkriptYamlRepresenter extends Representer {
 			int millis = calendar.get(Calendar.MILLISECOND);
 			StringBuilder buffer = new StringBuilder(String.valueOf(years));
 			while (buffer.length() < 4) {
-				// ancient years
 				buffer.insert(0, "0");
 			}
 			buffer.append("-");
@@ -312,7 +260,6 @@ public class SkriptYamlRepresenter extends Representer {
 				buffer.append(String.valueOf(millis));
 			}
 
-			// Get the offset from GMT taking DST into account
 			int gmtOffset = calendar.getTimeZone().getOffset(calendar.get(Calendar.ERA), calendar.get(Calendar.YEAR),
 					calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH),
 					calendar.get(Calendar.DAY_OF_WEEK), calendar.get(Calendar.MILLISECOND));
